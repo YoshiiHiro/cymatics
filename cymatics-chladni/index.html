@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chladni / Cymatics — Audio-driven</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #0a0a0f;
+      color: #c8c8d0;
+      font-family: system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+    }
+    h1 {
+      font-weight: 500;
+      font-size: 1.1rem;
+      letter-spacing: 0.04em;
+      margin: 0 0 0.5rem;
+    }
+    .hint {
+      max-width: 42rem;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      opacity: 0.85;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 0.75rem;
+    }
+    label.file-btn {
+      cursor: pointer;
+      padding: 0.45rem 0.9rem;
+      background: #1e1e2a;
+      border: 1px solid #3a3a50;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+    label.file-btn:hover { border-color: #5a5a78; }
+    input[type="file"] { display: none; }
+    .wheel-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.6rem;
+      background: #1a1a26;
+      border: 1px solid #3a3a50;
+      border-radius: 6px;
+      font-size: 0.82rem;
+    }
+    #rgbWheel {
+      width: 2rem;
+      height: 2rem;
+      border: none;
+      background: transparent;
+      padding: 0;
+      cursor: pointer;
+    }
+    #status {
+      font-size: 0.8rem;
+      opacity: 0.75;
+    }
+    main {
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <h1>Radial pixel field (audio-reactive)</h1>
+  <p class="hint">
+    Browsers cannot read audio from an embedded YouTube player (cross-origin).
+    Export audio from your video (e.g. mp3/wav/m4a), choose the file below — it plays once (reload or choose the file again to replay).
+    Low-res pixels animate from the center: rings and spokes driven by the spectrum.
+  </p>
+  <div id="controls">
+    <label class="file-btn">
+      Load audio file
+      <input type="file" id="audioFile" accept="audio/*,video/*" />
+    </label>
+    <label class="wheel-wrap">
+      RGB wheel
+      <input type="color" id="rgbWheel" value="#6980ff" />
+    </label>
+    <span id="status">No file loaded — idle radial animation.</span>
+  </div>
+  <main id="canvas-host"></main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/addons/p5.sound.min.js"></script>
+  <script src="sketch.js"></script>
+</body>
+</html>
