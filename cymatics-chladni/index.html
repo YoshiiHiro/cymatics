@@ -11,92 +11,53 @@
       background: #0a0a0f;
       color: #c8c8d0;
       font-family: system-ui, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 1rem;
-    }
-    h1 {
-      font-weight: 500;
-      font-size: 1.1rem;
-      letter-spacing: 0.04em;
-      margin: 0 0 0.5rem;
-    }
-    .hint {
-      max-width: 42rem;
-      font-size: 0.8rem;
-      line-height: 1.5;
-      opacity: 0.85;
-      margin-bottom: 1rem;
-      text-align: center;
-    }
-    #controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 0.75rem;
-    }
-    label.file-btn {
-      cursor: pointer;
-      padding: 0.45rem 0.9rem;
-      background: #1e1e2a;
-      border: 1px solid #3a3a50;
-      border-radius: 6px;
-      font-size: 0.85rem;
-    }
-    label.file-btn:hover { border-color: #5a5a78; }
-    input[type="file"] { display: none; }
-    .wheel-wrap {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      padding: 0.35rem 0.6rem;
-      background: #1a1a26;
-      border: 1px solid #3a3a50;
-      border-radius: 6px;
-      font-size: 0.82rem;
-    }
-    #rgbWheel {
-      width: 2rem;
-      height: 2rem;
-      border: none;
-      background: transparent;
-      padding: 0;
-      cursor: pointer;
-    }
-    #status {
-      font-size: 0.8rem;
-      opacity: 0.75;
-    }
-    main {
-      border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
     }
+    #canvas-host {
+      position: fixed;
+      inset: 0;
+    }
+    canvas {
+      display: block;
+    }
+    #overlayMeta {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 0.65rem 1rem 0.85rem;
+      font-size: 0.78rem;
+      text-align: center;
+      color: #d8def5;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+      pointer-events: none;
+      z-index: 10;
+      font-family: "Courier New", "Lucida Console", monospace;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-shadow:
+        1px 0 0 rgba(0, 0, 0, 0.9),
+        -1px 0 0 rgba(0, 0, 0, 0.9),
+        0 1px 0 rgba(0, 0, 0, 0.9),
+        0 -1px 0 rgba(0, 0, 0, 0.9);
+      image-rendering: pixelated;
+    }
+    #overlayMeta a {
+      color: #9eb4ff;
+      text-decoration: none;
+      pointer-events: auto;
+      text-shadow:
+        1px 0 0 rgba(0, 0, 0, 0.95),
+        -1px 0 0 rgba(0, 0, 0, 0.95),
+        0 1px 0 rgba(0, 0, 0, 0.95),
+        0 -1px 0 rgba(0, 0, 0, 0.95);
+    }
+    #overlayMeta a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <h1>Radial pixel field (audio-reactive)</h1>
-  <p class="hint">
-    Browsers cannot read audio from an embedded YouTube player (cross-origin).
-    Export audio from your video (e.g. mp3/wav/m4a), choose the file below — it plays once (reload or choose the file again to replay).
-    Low-res pixels animate from the center: rings and spokes driven by the spectrum.
-  </p>
-  <div id="controls">
-    <label class="file-btn">
-      Load audio file
-      <input type="file" id="audioFile" accept="audio/*,video/*" />
-    </label>
-    <label class="wheel-wrap">
-      RGB wheel
-      <input type="color" id="rgbWheel" value="#6980ff" />
-    </label>
-    <span id="status">No file loaded — idle radial animation.</span>
-  </div>
   <main id="canvas-host"></main>
+  <div id="overlayMeta"><span id="objktMetaValue">Now Visualising: loading...</span></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/p5.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.0/addons/p5.sound.min.js"></script>

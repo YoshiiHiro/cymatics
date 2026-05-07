@@ -4,12 +4,16 @@
  */
 
 let sound;
-let blobUrl;
 let fft;
 let audioLoaded = false;
 const FFT_BINS = 256;
-/** Max square canvas side (px); larger window → more on-screen pixels. */
-const MAX_CANVAS_SIDE = 560;
+/** Optional filter: pass ?creator=tz1... to force one minter. */
+const CREATOR_ADDRESS = new URLSearchParams(window.location.search).get("creator") || "";
+const OBJKT_CONTRACT = "KT1RJ6PbjHpwc3M5rw5s2Nbmefwbuwbdxton";
+const OBJKT_PAGE_BASE = "https://objkt.com/tokens";
+const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
+/** 0 = latest audio OBJKT, 1 = previous to latest, etc. */
+const AUDIO_OBJKT_OFFSET = 0;
 
 let plateSize;
 let plateBuffer;
@@ -30,7 +34,7 @@ const BASE_PALETTE = [
   [105, 115, 178],
   [158, 168, 222],
 ];
-const BASE_WHEEL_HUE = 226;
+const BASE_PALETTE_HUE = 226;
 const EDGE_SHARP = 2.35;
 const EDGE_MAG_SCALE = 11;
 const LUM_CONTRAST = 1.28;
@@ -40,6 +44,10 @@ const SPATIAL_COHESION = 0.62;
 
 let smoothBands;
 let activePalette = BASE_PALETTE.map((rgb) => rgb.slice());
+let objktMetaEl;
+let needsGestureToStart = false;
+let currentObjktTokenId = "";
+let currentObjktName = "";
 
 function remakePlateBuffer() {
   const gSide = constrain(
@@ -53,9 +61,8 @@ function remakePlateBuffer() {
 
 function setup() {
   smoothBands = new Array(RADIAL_LAYERS).fill(0.15);
-  const side = min(windowWidth - 40, min(windowHeight - 200, MAX_CANVAS_SIDE));
-  plateSize = side;
-  const cnv = createCanvas(side, side);
+  plateSize = max(windowWidth, windowHeight);
+  const cnv = createCanvas(windowWidth, windowHeight);
   cnv.parent("canvas-host");
   pixelDensity(1);
   noSmooth();
@@ -63,54 +70,14 @@ function setup() {
 
   fft = new p5.FFT(0.85, FFT_BINS);
 
-  const fileInput = document.getElementById("audioFile");
-  const rgbWheel = document.getElementById("rgbWheel");
-  const statusEl = document.getElementById("status");
-  if (rgbWheel) {
-    applyPaletteHueFromHex(rgbWheel.value);
-    rgbWheel.addEventListener("input", (e) => {
-      applyPaletteHueFromHex(e.target.value);
-    });
-  }
-  fileInput.addEventListener("change", (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    if (sound) {
-      sound.stop();
-      sound.disconnect();
-    }
-    if (blobUrl) {
-      URL.revokeObjectURL(blobUrl);
-      blobUrl = null;
-    }
-    blobUrl = URL.createObjectURL(f);
-    sound = loadSound(
-      blobUrl,
-      () => {
-        sound.setLoop(false);
-        fft.setInput(sound);
-        const ctx = getAudioContext();
-        if (ctx && ctx.state !== "running") ctx.resume();
-        sound.play();
-        audioLoaded = true;
-        statusEl.textContent =
-          "Playing once: " + f.name + " — audio shapes the radial pattern.";
-      },
-      (err) => {
-        statusEl.textContent = "Could not decode file. Try mp3/wav/ogg/m4a.";
-        console.error(err);
-      }
-    );
-  });
+  objktMetaEl = document.getElementById("objktMetaValue");
+  loadLatestMintedAudioObjkt();
 }
 
 function windowResized() {
-  const side = min(windowWidth - 40, min(windowHeight - 200, MAX_CANVAS_SIDE));
-  if (abs(side - plateSize) > 10) {
-    plateSize = side;
-    resizeCanvas(side, side);
-    remakePlateBuffer();
-  }
+  plateSize = max(windowWidth, windowHeight);
+  resizeCanvas(windowWidth, windowHeight);
+  remakePlateBuffer();
 }
 
 function draw() {
@@ -181,24 +148,23 @@ function draw() {
     plateBuffer.updatePixels();
   }
 
-  const lay = plateLayout();
-  image(plateBuffer, lay.ox, lay.oy, lay.drawW, lay.drawH);
-
-  noFill();
-  stroke(51, 56, 77, 130);
-  strokeWeight(1);
-  rect(lay.ox, lay.oy, lay.drawW - 1, lay.drawH - 1);
+  image(plateBuffer, 0, 0, width, height);
 }
 
-function plateLayout() {
-  const gw = plateBuffer.width;
-  const gh = plateBuffer.height;
-  const s = max(1, floor(min(width, height) / max(gw, gh)));
-  const drawW = gw * s;
-  const drawH = gh * s;
-  const ox = floor((width - drawW) * 0.5);
-  const oy = floor((height - drawH) * 0.5);
-  return { ox, oy, drawW, drawH };
+function mousePressed() {
+  if (needsGestureToStart) startSoundAfterGesture();
+}
+
+function keyPressed() {
+  if (key === "f" || key === "F") {
+    const fs = fullscreen();
+    fullscreen(!fs);
+  }
+}
+
+function touchStarted() {
+  if (needsGestureToStart) startSoundAfterGesture();
+  return false;
 }
 
 function bandEnergies(spectrum) {
@@ -255,10 +221,220 @@ function radialField(u, v, bands, t) {
   return out;
 }
 
-function applyPaletteHueFromHex(hex) {
-  const hsv = hexToHsv(hex);
-  const hueShiftDeg = hsv.h - BASE_WHEEL_HUE;
-  activePalette = BASE_PALETTE.map((rgb) => rotateHue(rgb, hueShiftDeg));
+async function loadLatestMintedAudioObjkt() {
+  if (!objktMetaEl) return;
+  objktMetaEl.textContent = "Now Visualising: loading OBJKT...";
+  try {
+    const token = await fetchAudioTokenByOffset(CREATOR_ADDRESS, AUDIO_OBJKT_OFFSET);
+    if (!token) {
+      objktMetaEl.textContent = "Now Visualising: no audio OBJKT found.";
+      return;
+    }
+
+    const artifact = readArtifactUri(token.metadata);
+    if (!artifact) {
+      objktMetaEl.textContent = "Now Visualising: OBJKT missing artifact URI.";
+      return;
+    }
+
+    const audioUrl = toHttpUri(artifact);
+    const objktUrl = tokenObjktUrl(token.tokenId);
+    currentObjktTokenId = String(token.tokenId || "");
+    currentObjktName = String((token.metadata && token.metadata.name) || "").trim();
+    await applyPaletteFromObjktCover(token.metadata);
+    if (objktMetaEl) {
+      const label = currentObjktName
+        ? currentObjktName + " (OBJKT #" + token.tokenId + ")"
+        : "OBJKT #" + token.tokenId;
+      objktMetaEl.innerHTML =
+        'Now Visualising: ' +
+        '<a href="' +
+        objktUrl +
+        '" target="_blank" rel="noopener noreferrer">' +
+        label +
+        "</a>";
+    }
+    loadSoundFromUrl(audioUrl, token.tokenId);
+  } catch (err) {
+    if (objktMetaEl) objktMetaEl.textContent = "Now Visualising: OBJKT fetch failed.";
+    console.error(err);
+  }
+}
+
+async function fetchAudioTokenByOffset(creatorAddress, audioOffset) {
+  const pageSize = 200;
+  const maxPages = 8;
+  let seenAudio = 0;
+
+  for (let page = 0; page < maxPages; page++) {
+    let url =
+      "https://api.tzkt.io/v1/tokens?" +
+      "contract=" +
+      encodeURIComponent(OBJKT_CONTRACT) +
+      "&sort.desc=tokenId" +
+      "&offset=" +
+      String(page * pageSize) +
+      "&limit=" +
+      String(pageSize);
+
+    if (creatorAddress) {
+      url += "&creator=" + encodeURIComponent(creatorAddress);
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("TzKT request failed: " + res.status);
+    const tokens = await res.json();
+    if (!Array.isArray(tokens) || tokens.length === 0) break;
+
+    for (const t of tokens) {
+      if (!isAudioMetadata(t.metadata)) continue;
+      if (seenAudio === audioOffset) return t;
+      seenAudio++;
+    }
+  }
+
+  return null;
+}
+
+function isAudioMetadata(metadata) {
+  if (!metadata) return false;
+  const formats = Array.isArray(metadata.formats) ? metadata.formats : [];
+  for (const f of formats) {
+    const mt = (f.mimeType || f.mime || "").toLowerCase();
+    if (mt.startsWith("audio/")) return true;
+  }
+  const artifact = (metadata.artifactUri || metadata.artifact_uri || "").toLowerCase();
+  return artifact.endsWith(".mp3") || artifact.endsWith(".wav") || artifact.endsWith(".ogg");
+}
+
+function readArtifactUri(metadata) {
+  if (!metadata) return "";
+  if (metadata.artifactUri) return metadata.artifactUri;
+  if (metadata.artifact_uri) return metadata.artifact_uri;
+  const formats = Array.isArray(metadata.formats) ? metadata.formats : [];
+  for (const f of formats) {
+    const mt = (f.mimeType || f.mime || "").toLowerCase();
+    if (mt.startsWith("audio/") && f.uri) return f.uri;
+  }
+  return "";
+}
+
+function toHttpUri(uri) {
+  if (!uri) return "";
+  if (uri.startsWith("ipfs://")) return IPFS_GATEWAY + uri.slice("ipfs://".length);
+  return uri;
+}
+
+function tokenObjktUrl(tokenId) {
+  return OBJKT_PAGE_BASE + "/" + OBJKT_CONTRACT + "/" + tokenId;
+}
+
+function readCoverUri(metadata) {
+  if (!metadata) return "";
+  return metadata.displayUri || metadata.thumbnailUri || metadata.image || "";
+}
+
+async function applyPaletteFromObjktCover(metadata) {
+  const cover = readCoverUri(metadata);
+  if (!cover) return;
+  const coverHttp = toHttpUri(cover);
+  try {
+    const dominant = await extractDominantRgb(coverHttp);
+    const hsv = rgbToHsv(dominant[0], dominant[1], dominant[2]);
+    const hueShiftDeg = hsv.h - BASE_PALETTE_HUE;
+    activePalette = BASE_PALETTE.map((rgb) => rotateHue(rgb, hueShiftDeg));
+  } catch (err) {
+    console.warn("Could not sample cover image color, using default palette.", err);
+  }
+}
+
+function extractDominantRgb(imageUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const size = 48;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) {
+          reject(new Error("2d context unavailable"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, size, size);
+        const data = ctx.getImageData(0, 0, size, size).data;
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let n = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3];
+          if (a < 24) continue;
+          r += data[i];
+          g += data[i + 1];
+          b += data[i + 2];
+          n++;
+        }
+        if (n === 0) {
+          reject(new Error("no opaque pixels"));
+          return;
+        }
+        resolve([round(r / n), round(g / n), round(b / n)]);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = () => reject(new Error("image load failed"));
+    img.src = imageUrl;
+  });
+}
+
+function loadSoundFromUrl(audioUrl, tokenId) {
+  if (sound) {
+    sound.stop();
+    sound.disconnect();
+  }
+  sound = loadSound(
+    audioUrl,
+    () => {
+      sound.setLoop(true);
+      sound.setVolume(0);
+      fft.setInput(sound);
+      const label = currentObjktName
+        ? '"' + currentObjktName + '" (OBJKT #' + tokenId + ")"
+        : "OBJKT #" + tokenId;
+      if (objktMetaEl) {
+        objktMetaEl.innerHTML =
+          'Now Visualising: <a href="' +
+          tokenObjktUrl(tokenId) +
+          '" target="_blank" rel="noopener noreferrer">' +
+          label +
+          "</a>";
+      }
+      startSoundAfterGesture();
+    },
+    (err) => {
+      if (objktMetaEl) objktMetaEl.textContent = "Now Visualising: failed to decode OBJKT audio.";
+      console.error(err);
+    }
+  );
+}
+
+function startSoundAfterGesture() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state !== "running") {
+    ctx.resume().catch(() => {});
+  }
+  if (ctx.state === "running" && sound && !sound.isPlaying()) {
+    sound.play();
+    audioLoaded = true;
+    needsGestureToStart = false;
+  } else if (ctx.state !== "running") {
+    needsGestureToStart = true;
+  }
 }
 
 function rotateHue(rgb, hueShiftDeg) {
@@ -266,14 +442,6 @@ function rotateHue(rgb, hueShiftDeg) {
   const shiftedHue = (hsv.h + hueShiftDeg + 360) % 360;
   const out = hsvToRgb(shiftedHue, hsv.s, hsv.v);
   return [out[0], out[1], out[2]];
-}
-
-function hexToHsv(hex) {
-  const clean = (hex || "#ffffff").replace("#", "");
-  const r = parseInt(clean.slice(0, 2), 16) || 255;
-  const g = parseInt(clean.slice(2, 4), 16) || 255;
-  const b = parseInt(clean.slice(4, 6), 16) || 255;
-  return rgbToHsv(r, g, b);
 }
 
 function rgbToHsv(r255, g255, b255) {
